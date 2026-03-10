@@ -150,7 +150,7 @@ async function runConversion(taskId, inputPath, params) {
         ...timeArgs,
         '-i', inputPath,
         '-i', palettePath,
-        '-lavfi', f"fps=${fps},${vfScale} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5",
+        '-lavfi', `fps=${fps},${vfScale} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5`,
         '-loop', loop.toString(),
         outputPath
       ], (line) => {
@@ -209,9 +209,16 @@ app.post('/upload', upload.array('files', 10), async (req, res) => {
   const uploaded = [];
   for (const f of req.files) {
     const duration = await getVideoDuration(f.path);
+    // 尝试正确处理中文文件名
+    let originalName = f.originalname;
+    try {
+      originalName = decodeURIComponent(escape(f.originalname));
+    } catch (e) {
+      originalName = f.originalname;
+    }
     uploaded.push({
       filename: f.filename,
-      original_name: f.originalname,
+      original_name: originalName,
       size: f.size,
       duration
     });
