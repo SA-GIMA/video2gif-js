@@ -15,6 +15,31 @@ const OUTPUT_DIR = path.join(__dirname, 'output');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
+// 确定 ffmpeg 和 ffprobe 的路径
+function getBinaryPath(name) {
+  const platform = process.platform === 'win32' ? 'win' : 'mac';
+  const binaryName = process.platform === 'win32' ? `${name}.exe` : name;
+  
+  // 1. 尝试开发环境路径 (项目根目录/bin/...)
+  const devPath = path.join(__dirname, 'bin', platform, binaryName);
+  if (fs.existsSync(devPath)) return devPath;
+
+  // 2. 尝试打包后环境路径 (resources/bin/...)
+  if (process.resourcesPath) {
+    const prodPath = path.join(process.resourcesPath, 'bin', platform, binaryName);
+    if (fs.existsSync(prodPath)) return prodPath;
+  }
+
+  // 3. 回退到系统 PATH 中的命令
+  return name;
+}
+
+const FFMPEG_PATH = getBinaryPath('ffmpeg');
+const FFPROBE_PATH = getBinaryPath('ffprobe');
+
+console.log('使用 FFMPEG 路径:', FFMPEG_PATH);
+console.log('使用 FFPROBE 路径:', FFPROBE_PATH);
+
 // 配置上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
@@ -39,7 +64,7 @@ const taskQueue = [];
 // 获取视频时长
 function getVideoDuration(filepath) {
   return new Promise((resolve) => {
-    execFile('ffprobe', [
+    execFile(FFPROBE_PATH, [
       '-v', 'error',
       '-show_entries', 'format=duration',
       '-of', 'default=noprint_wrappers=1:nokey=1',
@@ -97,7 +122,7 @@ async function runConversion(taskId, inputPath, params) {
 
   const runFFmpeg = (args, onStderr, onExit) => {
     return new Promise((resolve, reject) => {
-      const proc = spawn('ffmpeg', ['-y', ...args]);
+      const proc = spawn(FFMPEG_PATH, ['-y', ...args]);
       proc.stderr.on('data', (data) => onStderr && onStderr(data.toString()));
       proc.on('close', (code) => {
         if (code === 0) resolve();
@@ -125,7 +150,7 @@ async function runConversion(taskId, inputPath, params) {
         ...timeArgs,
         '-i', inputPath,
         '-i', palettePath,
-        '-lavfi', `fps=${fps},${vfScale} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5`,
+        '-lavfi', f"fps=${fps},${vfScale} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5",
         '-loop', loop.toString(),
         outputPath
       ], (line) => {
